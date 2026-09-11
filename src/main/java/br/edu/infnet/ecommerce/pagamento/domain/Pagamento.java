@@ -4,6 +4,9 @@ import jakarta.persistence.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 @Entity
@@ -60,6 +63,9 @@ public class Pagamento {
         return new Pagamento(pedidoId, usuarioId, valor, formaPagamento, numeroCartao);
     }
 
+    @Transient
+    private final List<EventoDominio> eventos = new ArrayList<>();
+
     public void aprovar(String codigoAutorizacao) {
         exigirPendente();
         if (codigoAutorizacao == null || codigoAutorizacao.isBlank()) {
@@ -68,6 +74,11 @@ public class Pagamento {
         this.statusPagamento = StatusPagamento.APROVADO;
         this.codigoAutorizacao = codigoAutorizacao;
         this.processadoEm = LocalDateTime.now();
+
+        this.eventos.add(new PagamentoAprovado(
+                this.id, this.pedidoId, this.usuarioId,
+                this.valor, this.codigoAutorizacao, this.processadoEm
+        ));
     }
 
     public void recusar(String motivo) {
@@ -78,6 +89,19 @@ public class Pagamento {
         this.statusPagamento = StatusPagamento.RECUSADO;
         this.motivo = motivo;
         this.processadoEm = LocalDateTime.now();
+
+        this.eventos.add(new PagamentoRecusado(
+                this.id, this.pedidoId, this.usuarioId,
+                this.valor, this.motivo, this.processadoEm
+        ));
+    }
+
+    public List<EventoDominio> eventosOcorridos() {
+        return Collections.unmodifiableList(eventos);
+    }
+
+    public void limparEventos() {
+        this.eventos.clear();
     }
 
     private void exigirPendente() {

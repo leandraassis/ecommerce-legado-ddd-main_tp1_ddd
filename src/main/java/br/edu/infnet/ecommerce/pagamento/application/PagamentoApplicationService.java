@@ -2,6 +2,7 @@ package br.edu.infnet.ecommerce.pagamento.application;
 
 import br.edu.infnet.ecommerce.pagamento.domain.*;
 import jakarta.transaction.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -13,17 +14,20 @@ public class PagamentoApplicationService {
     private final PedidoConsulta pedidoConsulta;
     private final UsuarioConsulta usuarioConsulta;
     private final ProcessadorCartao processadorCartao;
+    private final ApplicationEventPublisher publisher;
 
     public PagamentoApplicationService(
             PagamentoRepository pagamentoRepository,
             PedidoConsulta pedidoConsulta,
             UsuarioConsulta usuarioConsulta,
-            ProcessadorCartao processadorCartao
+            ProcessadorCartao processadorCartao,
+            ApplicationEventPublisher publisher
     ) {
         this.pagamentoRepository = pagamentoRepository;
         this.pedidoConsulta = pedidoConsulta;
         this.usuarioConsulta = usuarioConsulta;
         this.processadorCartao = processadorCartao;
+        this.publisher = publisher;
     }
 
     @Transactional
@@ -39,6 +43,7 @@ public class PagamentoApplicationService {
         NumeroCartao numeroCartao = NumeroCartao.de(numeroCartaoBruto);
 
         Pagamento pagamento = Pagamento.solicitar(pedidoId, usuarioId, valor, FormaPagamento.CARTAO, numeroCartao);
+        pagamento = pagamentoRepository.salvar(pagamento);
 
         ResultadoProcessamento resultado = processadorCartao.processar(valor, numeroCartao);
 
@@ -48,6 +53,11 @@ public class PagamentoApplicationService {
             pagamento.recusar(resultado.motivo());
         }
 
-        return pagamentoRepository.salvar(pagamento);
+        Pagamento salvo = pagamentoRepository.salvar(pagamento);
+
+        pagamento.eventosOcorridos().forEach(publisher::publishEvent);
+        pagamento.limparEventos();
+
+        return salvo;
     }
 }
